@@ -2,195 +2,248 @@ import random
 
 class Move:
     """Представляет ход в игре."""
-    def __init__(self, sr, sc, er, ec, p, cap, jr=None, jc=None):
+    def __init__(self, start_row, start_col, end_row, end_col, piece, captured_piece, jumped_piece_row=None, jumped_piece_col=None, became_queen=False):
         """Инициализация хода."""
-        self.sr, self.sc, self.er, self.ec, self.p, self.cap, self.jr, self.jc = sr, sc, er, ec, p, cap, jr, jc
+        self.start_row = start_row
+        self.start_col = start_col
+        self.end_row = end_row
+        self.end_col = end_col
+        self.piece = piece
+        self.captured_piece = captured_piece
+        self.jumped_piece_row = jumped_piece_row
+        self.jumped_piece_col = jumped_piece_col
+        self.became_queen = became_queen #Если шашка стала дамкой
 
 class Piece:
     """Базовый класс для фигур."""
-    def __init__(self, c, s):
+    def __init__(self, color, symbol):
         """Инициализация фигуры."""
-        self.color, self.symbol = c, s
+        self.color = color
+        self.symbol = symbol
+
     def __str__(self):
         """Возвращает строковое представление фигуры."""
         return self.symbol
-    def possible_moves(self, b, sr, sc):
+
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов (пустой по умолчанию)."""
         return []
-    def is_valid_move(self, b, sr, sc, er, ec):
+
+    def is_valid_move(self, board, start_row, start_col, end_row, end_col):
         """Проверяет допустимость хода."""
-        return (er, ec) in self.possible_moves(b, sr, sc)
+        return (end_row, end_col) in self.possible_moves(board, start_row, start_col)
+
 
 class Pawn(Piece):
     """Класс для пешки."""
-    def __init__(self, c): super().__init__(c, "P" if c == "white" else "p")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color):
+        """Инициализация пешки."""
+        super().__init__(color, "P" if color == "white" else "p")
+
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для пешки."""
-        m = []
-        d = -1 if self.color == "white" else 1
-        nr = sr + d
-        if 0 <= nr < 8 and not b.board[nr][sc]: m.append((nr, sc))
-        if (self.color == "white" and sr == 6) or (self.color == "black" and sr == 1):
-            nr = sr + 2 * d
-            if not b.board[nr][sc] and not b.board[sr + d][sc]: m.append((nr, sc))
-        for co in [-1, 1]:
-            nc = sc + co
-            if 0 <= nc < 8 and 0 <= (nr := sr + d) < 8 and b.board[nr][nc] and b.board[nr][nc].color != self.color: m.append((nr, nc))
-        return m
+        moves = []
+        direction = -1 if self.color == "white" else 1
+        new_row = start_row + direction
+        if 0 <= new_row < 8 and not board.board[new_row][start_col]:
+            moves.append((new_row, start_col))
+        if (self.color == "white" and start_row == 6) or (self.color == "black" and start_row == 1):
+            new_row = start_row + 2 * direction
+            if not board.board[new_row][start_col] and not board.board[start_row + direction][start_col]:
+                moves.append((new_row, start_col))
+        for col_offset in [-1, 1]:
+            new_col = start_col + col_offset
+            new_row = start_row + direction
+            if 0 <= new_row < 8 and 0 <= new_col < 8 and board.board[new_row][new_col] and board.board[new_row][new_col].color != self.color:
+                moves.append((new_row, new_col))
+        return moves
 
 class Rook(Piece):
     """Класс для ладьи."""
-    def __init__(self, c): super().__init__(c, "R" if c == "white" else "r")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "R" if color == "white" else "r")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для ладьи."""
-        m = []
-        for dir in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+        moves = []
+        for direction in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             for i in range(1, 8):
-                nr, nc = sr + dir[0] * i, sc + dir[1] * i
-                if 0 <= nr < 8 and 0 <= nc < 8:
-                    if not b.board[nr][nc]: m.append((nr, nc))
+                new_row = start_row + direction[0] * i
+                new_col = start_col + direction[1] * i
+                if 0 <= new_row < 8 and 0 <= new_col < 8:
+                    if not board.board[new_row][new_col]:
+                        moves.append((new_row, new_col))
                     else:
-                        if b.board[nr][nc].color != self.color: m.append((nr, nc))
+                        if board.board[new_row][new_col].color != self.color:
+                            moves.append((new_row, new_col))
                         break
-                else: break
-        return m
+                else:
+                    break
+        return moves
 
 class Knight(Piece):
     """Класс для коня."""
-    def __init__(self, c): super().__init__(c, "N" if c == "white" else "n")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "N" if color == "white" else "n")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для коня."""
-        m = []
-        km = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
-        for mv in km:
-            nr, nc = sr + mv[0], sc + mv[1]
-            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
-        return m
+        moves = []
+        knight_moves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for move in knight_moves:
+            new_row = start_row + move[0]
+            new_col = start_col + move[1]
+            if 0 <= new_row < 8 and 0 <= new_col < 8 and (not board.board[new_row][new_col] or board.board[new_row][new_col].color != self.color):
+                moves.append((new_row, new_col))
+        return moves
 
 class Bishop(Piece):
     """Класс для слона."""
-    def __init__(self, c): super().__init__(c, "B" if c == "white" else "b")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "B" if color == "white" else "b")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для слона."""
-        m = []
-        for dir in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
+        moves = []
+        for direction in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
             for i in range(1, 8):
-                nr, nc = sr + dir[0] * i, sc + dir[1] * i
-                if 0 <= nr < 8 and 0 <= nc < 8:
-                    if not b.board[nr][nc]: m.append((nr, nc))
+                new_row = start_row + direction[0] * i
+                new_col = start_col + direction[1] * i
+                if 0 <= new_row < 8 and 0 <= new_col < 8:
+                    if not board.board[new_row][new_col]:
+                        moves.append((new_row, new_col))
                     else:
-                        if b.board[nr][nc].color != self.color: m.append((nr, nc))
+                        if board.board[new_row][new_col].color != self.color:
+                            moves.append((new_row, new_col))
                         break
-                else: break
-        return m
+                else:
+                    break
+        return moves
 
 class Queen(Piece):
     """Класс для ферзя."""
-    def __init__(self, c): super().__init__(c, "Q" if c == "white" else "q")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "Q" if color == "white" else "q")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для ферзя."""
-        return Rook(self.color).possible_moves(b, sr, sc) + Bishop(self.color).possible_moves(b, sr, sc)
+        return Rook(self.color).possible_moves(board, start_row, start_col) + Bishop(self.color).possible_moves(board, start_row, start_col)
 
 class King(Piece):
     """Класс для короля."""
-    def __init__(self, c): super().__init__(c, "K" if c == "white" else "k")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "K" if color == "white" else "k")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для короля."""
-        m = []
-        km = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        for mv in km:
-            nr, nc = sr + mv[0], sc + mv[1]
-            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
-        return m
+        moves = []
+        king_moves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        for move in king_moves:
+            new_row = start_row + move[0]
+            new_col = start_col + move[1]
+            if 0 <= new_row < 8 and 0 <= new_col < 8 and (not board.board[new_row][new_col] or board.board[new_row][new_col].color != self.color):
+                moves.append((new_row, new_col))
+        return moves
 
 class Checker(Piece):
     """Класс для шашки."""
-    def __init__(self, c):
+    def __init__(self, color, is_queen = False):
         """Инициализация шашки."""
-        super().__init__(c, "W" if c == "white" else "B")
-        self.direction = -1 if c == "white" else 1
+        super().__init__(color, "W" if color == "white" else "B")
+        self.direction = -1 if color == "white" else 1
+        self.is_queen = is_queen #Дамка или нет
+        if self.is_queen: #Дамка отображается иначе
+            self.symbol = "WQ" if color == "white" else "BQ"
 
-    def possible_moves(self, b, sr, sc):
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для шашки."""
-        m = []
-        for dir in [self.direction]:
-            for co in [-1, 1]:
-                nr, nc = sr + dir, sc + co
-                if 0 <= nc < 8 and 0 <= nr < 8 and not b.board[nr][nc]: m.append((nr, nc))
-        return m
+        moves = []
+        directions = [-1, 1] if self.is_queen else [self.direction]  # Дамки ходят в обе стороны
 
-    def find_capture_moves(self, b, sr, sc):
+        for direction in directions:
+            for col_offset in [-1, 1]:
+                new_col = start_col + col_offset
+                new_row = start_row + direction
+                if 0 <= new_col < 8 and 0 <= new_row < 8 and not board.board[new_row][new_col]:
+                    moves.append((new_row, new_col))
+        return moves
+
+    def find_capture_moves(self, board, start_row, start_col):
         """Находит все ходы взятия."""
-        cm = []
-        for dir in [-1, 1]:
-            for co in [-1, 1]:
-                nr, nc = sr + dir, sc + co
-                jr, jc = sr + 2 * dir, sc + 2 * co
+        capture_moves = []
+        directions = [-1, 1] if self.is_queen else [self.direction]
 
-                if (0 <= nr < 8 and 0 <= nc < 8 and 0 <= jr < 8 and 0 <= jc < 8 and
-                    b.board[nr][nc] and b.board[nr][nc].color != self.color and not b.board[jr][jc]):
-                    cm.append((jr, jc))
-        return cm
+        for direction in directions:
+            for col_offset in [-1, 1]:
+                new_col = start_col + col_offset
+                new_row = start_row + direction
+                jumped_row = start_row + 2 * direction
+                jumped_col = start_col + 2 * col_offset
+
+                if (0 <= new_row < 8 and 0 <= new_col < 8 and 0 <= jumped_row < 8 and 0 <= jumped_col < 8 and
+                    board.board[new_row][new_col] and board.board[new_row][new_col].color != self.color and not board.board[jumped_row][jumped_col]):
+                    capture_moves.append((jumped_row, jumped_col))
+        return capture_moves
+
 
 class Lancer(Piece):
     """Класс для Копейщика."""
-    def __init__(self, c): super().__init__(c, "L" if c == "white" else "l")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "L" if color == "white" else "l")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для Копейщика."""
-        m = []
-        d = -1 if self.color == "white" else 1
+        moves = []
+        direction = -1 if self.color == "white" else 1
         for i in range(1, 8):
-            nr = sr + d * i
-            if 0 <= nr < 8:
-                if not b.board[nr][sc]: m.append((nr, sc))
+            new_row = start_row + direction * i
+            if 0 <= new_row < 8:
+                if not board.board[new_row][start_col]:
+                    moves.append((new_row, start_col))
                 else:
-                    if b.board[nr][sc].color != self.color: m.append((nr, sc))
+                    if board.board[new_row][start_col].color != self.color:
+                        moves.append((new_row, start_col))
                     break
-            else: break
-        return m
+            else:
+                break
+        return moves
 
 class Assassin(Piece):
     """Класс для Ассасина."""
-    def __init__(self, c): super().__init__(c, "A" if c == "white" else "a")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "A" if color == "white" else "a")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для Ассасина."""
-        m = []
-        am = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
-        for mv in am:
-            nr, nc = sr + mv[0], sc + mv[1]
-            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
-        return m
+        moves = []
+        assassin_moves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for move in assassin_moves:
+            new_row = start_row + move[0]
+            new_col = start_col + move[1]
+            if 0 <= new_row < 8 and 0 <= new_col < 8 and (not board.board[new_row][new_col] or board.board[new_row][new_col].color != self.color):
+                moves.append((new_row, new_col))
+        return moves
 
 class Fortress(Piece):
     """Класс для Крепости."""
-    def __init__(self, c): super().__init__(c, "F" if c == "white" else "f")
-    def possible_moves(self, b, sr, sc):
+    def __init__(self, color): super().__init__(color, "F" if color == "white" else "f")
+    def possible_moves(self, board, start_row, start_col):
         """Возвращает список возможных ходов для Крепости."""
-        m = []
-        fm = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        for mv in fm:
-            nr, nc = sr + mv[0], sc + mv[1]
-            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
-        for r in range(8):
-            for c in range(8):
-                if not b.board[r][c]: m.append((r, c))
-        return m
+        moves = []
+        fortress_moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for move in fortress_moves:
+            new_row = start_row + move[0]
+            new_col = start_col + move[1]
+            if 0 <= new_row < 8 and 0 <= new_col < 8 and (not board.board[new_row][new_col] or board.board[new_row][new_col].color != self.color):
+                moves.append((new_row, new_col))
+        for row in range(8):
+            for col in range(8):
+                if not board.board[row][col]:
+                    moves.append((row, col))
+        return moves
 
 class Board:
     """Представляет шахматную/шашечную доску."""
-    def __init__(self, gt="chess", mc=False):
+    def __init__(self, game_type="chess", modified_chess=False):
         """Инициализация доски."""
         self.board = [[None for _ in range(8)] for _ in range(8)]
-        self.game_type, self.modified_chess = gt, mc
+        self.game_type = game_type
+        self.modified_chess = modified_chess
         self.setup_board()
 
     def setup_board(self):
         """Расстановка фигур."""
         if self.game_type == "chess":
             piece_order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
-            for i, p in enumerate(piece_order):
-                self.board[7][i] = p("white")
-                self.board[0][i] = p("black")
+            for i, piece_type in enumerate(piece_order):
+                self.board[7][i] = piece_type("white")
+                self.board[0][i] = piece_type("black")
 
             #Ставим пешки или новые фигуры на их место
             if self.modified_chess:
@@ -204,145 +257,186 @@ class Board:
                     self.board[6][i] = Pawn("white")
                     self.board[1][i] = Pawn("black")
 
-
         elif self.game_type == "checkers":
-            for r in [0, 1, 2]:
-                for c in range(8):
-                    if (r + c) % 2 != 0: self.board[r][c] = Checker("black")
-            for r in [5, 6, 7]:
-                for c in range(8):
-                    if (r + c) % 2 != 0: self.board[r][c] = Checker("white")
+            for row in [0, 1, 2]:
+                for col in range(8):
+                    if (row + col) % 2 != 0: self.board[row][col] = Checker("black")
+            for row in [5, 6, 7]:
+                for col in range(8):
+                    if (row + col) % 2 != 0: self.board[row][col] = Checker("white")
 
-    def display(self, mc, pm=None, cm=None, tp=None, kic=False):
+    def display(self, move_count, possible_moves=None, capture_moves=None, threatened_pieces=None, king_in_check=False):
         """Отображает доску в консоли."""
-        print(f"Текущий ход: {mc}")
+        print(f"Текущий ход: {move_count}")
         print("  a b c d e f g h")
-        for r in range(8):
-            print(8 - r, end=" ")
-            for c in range(8):
-                p = self.board[r][c]
-                if kic and isinstance(p, King) and p.color == self.current_player: print("# ", end="")
-                elif tp and (r, c) in tp: print("? ", end="")
-                elif pm and (r, c) in pm: print("* ", end="")
-                elif cm and (r, c) in cm: print("! ", end="")
-                elif not p: print(". ", end="")
-                else: print(p, end=" ")
-            print(8 - r)
+        for row in range(8):
+            print(8 - row, end=" ")
+            for col in range(8):
+                piece = self.board[row][col]
+                if king_in_check and isinstance(piece, King) and piece.color == self.current_player: print("# ", end="")
+                elif threatened_pieces and (row, col) in threatened_pieces: print("? ", end="")
+                elif possible_moves and (row, col) in possible_moves: print("* ", end="")
+                elif capture_moves and (row, col) in capture_moves: print("! ", end="")
+                elif not piece: print(". ", end="")
+                else: print(piece, end=" ")
+            print(8 - row)
         print("  a b c d e f g h")
 
-    def move_piece(self, sr, sc, er, ec, jr=None, jc=None):
+    def move_piece(self, start_row, start_col, end_row, end_col, jumped_piece_row=None, jumped_piece_col=None):
         """Перемещает фигуру."""
-        p = self.board[sr][sc]
-        cap = self.board[er][ec]
-        self.board[er][ec] = p
-        self.board[sr][sc] = None
-        if jr is not None and jc is not None: self.board[jr][jc] = None
-        return cap
+        piece = self.board[start_row][start_col]
+        captured_piece = self.board[end_row][end_col]
+        self.board[end_row][end_col] = piece
+        self.board[start_row][start_col] = None
+        if jumped_piece_row is not None and jumped_piece_col is not None:
+            self.board[jumped_piece_row][jumped_piece_col] = None
+        return captured_piece
 
     def undo_move(self, move):
         """Отменяет ход."""
-        self.board[move.sr][move.sc] = move.p
-        self.board[move.er][move.ec] = move.cap
-        if move.jr and move.jc and self.game_type == "checkers":
-            self.board[move.jr][move.jc] = Checker("black" if self.current_player == "white" else "white")
+        self.board[move.start_row][move.start_col] = move.piece
+        self.board[move.end_row][move.end_col] = move.captured_piece
+        if move.jumped_piece_row and move.jumped_piece_col and self.game_type == "checkers":
+            self.board[move.jumped_piece_row][move.jumped_piece_col] = Checker("black" if self.current_player == "white" else "white")
+        if move.became_queen: #Если шашка стала дамкой, то надо откатить
+            color = "black" if self.current_player == "white" else "white"
+            self.board[move.start_row][move.start_col] = Checker(color)
+            self.board[move.end_row][move.end_col] = None
 
 class Game:
     """Управляет игровым процессом."""
-    def __init__(self, gt="chess", mc=False):
+    def __init__(self, game_type="chess", modified_chess=False):
         """Инициализация игры."""
-        self.board = Board(gt, mc)
-        self.current_player, self.move_count, self.game_type, self.modified_chess, self.move_history = "white", 1, gt, mc, []
+        self.board = Board(game_type, modified_chess)
+        self.current_player = "white"
+        self.move_count = 1
+        self.game_type = game_type
+        self.modified_chess = modified_chess
+        self.move_history = []
 
-    def get_coordinates(self, pos):
+    def get_coordinates(self, position):
         """Преобразует координаты."""
-        if len(pos) != 2 or not (0 <= (col := ord(pos[0]) - ord("a")) < 8 and 0 <= (row := 8 - int(pos[1])) < 8): return None
+        if len(position) != 2 or not (0 <= (col := ord(position[0]) - ord("a")) < 8 and 0 <= (row := 8 - int(position[1])) < 8): return None
         return row, col
 
     def play(self):
         """Запуск игры."""
         while True:
-            tp = self.find_threatened_pieces()
-            kic = self.is_king_in_check()
-            self.board.display(self.move_count, tp=tp, kic=kic)
+            threatened_pieces = self.find_threatened_pieces()
+            king_in_check = self.is_king_in_check()
+            self.board.display(self.move_count, possible_moves=None, capture_moves=None, threatened_pieces=threatened_pieces, king_in_check=king_in_check)
             print(f"Ход {self.move_count}. Ход {self.current_player}.")
             print("Введите 'отмена' для отмены хода или 'отмена N' для отмены N ходов.  Введите координаты фигуры (например, a2).")
 
             # 1. Выбор фигуры
             while True:
-                sp = input("Выберите фигуру для хода: ")
-                if sp == "отмена": self.undo_last_move(); break
-                elif sp.startswith("отмена "):
-                    try: self.undo_moves(int(sp[7:])); break
-                    except ValueError: print("Неверный формат команды 'отмена'. Используйте 'отмена N', где N - целое число."); continue
+                start_position = input("Выберите фигуру для хода: ")
+                if start_position == "отмена":
+                    self.undo_last_move()
+                    break
+                elif start_position.startswith("отмена "):
+                    try:
+                        number_moves = int(start_position[7:])
+                        self.undo_moves(number_moves)
+                        break
+                    except ValueError:
+                        print("Неверный формат команды 'отмена'. Используйте 'отмена N', где N - целое число.")
+                        continue
 
-                sc = self.get_coordinates(sp)
-                if not sc: print("Неверный формат позиции.  Пример: a2"); continue
+                start_coordinates = self.get_coordinates(start_position)
+                if not start_coordinates:
+                    print("Неверный формат позиции.  Пример: a2")
+                    continue
 
-                sr, sc = sc
-                p = self.board.board[sr][sc]
-                if not p: print("На этой позиции нет фигуры."); continue
-                if p.color != self.current_player: print("Это не ваша фигура."); continue
+                start_row, start_col = start_coordinates
+                piece = self.board.board[start_row][start_col]
+                if not piece:
+                    print("На этой позиции нет фигуры.")
+                    continue
+                if piece.color != self.current_player:
+                    print("Это не ваша фигура.")
+                    continue
 
                 # 2. Подсказка и отображение
-                pm = p.possible_moves(self.board, sr, sc)
-                cm = p.find_capture_moves(self.board, sr, sc) if self.game_type == "checkers" and isinstance(p, Checker) else []
-                if not pm and not cm and self.game_type == "chess": print("У этой фигуры нет доступных ходов. Выберите другую фигуру."); continue
+                possible_moves = piece.possible_moves(self.board, start_row, start_col)
+                capture_moves = piece.find_capture_moves(self.board, start_row, start_col) if self.game_type == "checkers" and isinstance(piece, Checker) else []
+                if not possible_moves and not capture_moves and self.game_type == "chess":
+                    print("У этой фигуры нет доступных ходов. Выберите другую фигуру.")
+                    continue
 
-                self.board.display(self.move_count, pm, cm, tp, kic)
+                self.board.display(self.move_count, possible_moves, capture_moves, threatened_pieces, king_in_check)
                 break
 
-            if sp.startswith("отмена") or sp == "отмена": continue
+            if start_position == "отмена" or start_position.startswith("отмена "):
+                continue
 
             # 3. Ввод целевой позиции
             while True:
-                ep = input("Введите целевую позицию: ")
-                ec = self.get_coordinates(ep)
-                if not ec: print("Неверный формат позиции.  Пример: a2"); continue
+                end_position = input("Введите целевую позицию: ")
+                end_coordinates = self.get_coordinates(end_position)
+                if not end_coordinates:
+                    print("Неверный формат позиции.  Пример: a2")
+                    continue
 
-                er, ec = ec
-                jr, jc = None, None
-                if self.game_type == "checkers" and isinstance(p, Checker) and (er,ec) in cm:
-                    jr, jc = (sr + er) // 2, (sc + ec) // 2
-                    cap = self.board.board[jr][jc]
-                elif self.board.board[er][ec] and self.board.board[er][ec].color != p.color: cap = self.board.board[er][ec]
-                else: cap = None
+                end_row, end_col = end_coordinates
+                jumped_piece_row = None
+                jumped_piece_col = None
+                captured_piece = None
+                became_queen = False #Стала ли шашка дамкой
 
-                is_valid_move = (self.game_type == "checkers" and isinstance(p, Checker) and (er, ec) in cm) or ((er, ec) in pm or (er, ec) in cm)
+                if self.game_type == "checkers" and isinstance(piece, Checker) and (end_row, end_col) in capture_moves:
+                    jumped_piece_row = (start_row + end_row) // 2
+                    jumped_piece_col = (start_col + end_col) // 2
+                    captured_piece = self.board.board[jumped_piece_row][jumped_piece_col]
+
+                elif self.board.board[end_row][end_col] and self.board.board[end_row][end_col].color != piece.color:
+                  captured_piece = self.board.board[end_row][end_col]
+
+                is_valid_move = (self.game_type == "checkers" and isinstance(piece, Checker) and (end_row, end_col) in capture_moves) or ((end_row, end_col) in possible_moves or (end_row, end_col) in capture_moves)
 
                 if is_valid_move:
-                    captured_piece = self.board.move_piece(sr, sc, er, ec, jr, jc)
-                    move = Move(sr, sc, er, ec, p, captured_piece, jr, jc)
+                    #Проверяем, стала ли шашка дамкой
+                    if self.game_type == "checkers" and isinstance(piece, Checker) and not piece.is_queen and (end_row == 0 or end_row == 7):
+                        became_queen = True
+                        piece = Checker(piece.color, True) #Создаём дамку
+                        self.board.board[start_row][start_col] = None
+                        self.board.board[end_row][end_col] = piece #Ставим её на доску
+
+                    captured_piece = self.board.move_piece(start_row, start_col, end_row, end_col, jumped_piece_row, jumped_piece_col)
+                    move = Move(start_row, start_col, end_row, end_col, piece, captured_piece, jumped_piece_row, jumped_piece_col, became_queen)
                     self.move_history.append(move)
                     self.current_player = "black" if self.current_player == "white" else "white"
                     self.move_count += 1
                     break
                 else:
                     print("Недопустимый ход.")
-                    self.board.display(self.move_count, pm, cm, tp, kic)
+                    threatened_pieces = self.find_threatened_pieces()
+                    king_in_check = self.is_king_in_check()
+                    self.board.display(self.move_count, possible_moves, capture_moves, threatened_pieces, king_in_check)
 
     def find_threatened_pieces(self):
         """Находит все фигуры, находящиеся под ударом."""
-        tp = []
-        oc = "black" if self.current_player == "white" else "white"
-        for orow in range(8):
-            for ocol in range(8):
-                op = self.board.board[orow][ocol]
-                if op and op.color == oc:
-                    pom = op.possible_moves(self.board, orow, ocol)
+        threatened_pieces = []
+        opponent_color = "black" if self.current_player == "white" else "white"
+        for opponent_row in range(8):
+            for opponent_col in range(8):
+                opponent_piece = self.board.board[opponent_row][opponent_col]
+                if opponent_piece and opponent_piece.color == opponent_color:
+                    possible_opponent_moves = opponent_piece.possible_moves(self.board, opponent_row, opponent_col)
                     for row in range(8):
                         for col in range(8):
-                            p = self.board.board[row][col]
-                            if p and p.color == self.current_player and not isinstance(p, King) and (row, col) in pom:
-                                tp.append((row, col))
-        return tp
+                            piece = self.board.board[row][col]
+                            if piece and piece.color == self.current_player and not isinstance(piece, King) and (row, col) in possible_opponent_moves:
+                                threatened_pieces.append((row, col))
+        return threatened_pieces
 
     def is_king_in_check(self):
         """Проверяет, находится ли король под шахом."""
-        kp = next(((r, c) for r in range(8) for c in range(8) if isinstance(self.board.board[r][c], King) and self.board.board[r][c].color == self.current_player), None)
-        if not kp: return False
-        kr, kc = kp
-        oc = "black" if self.current_player == "white" else "white"
-        return any(isinstance(self.board.board[r][c], Piece) and self.board.board[r][c].color == oc and (kr, kc) in self.board.board[r][c].possible_moves(self.board, r, c) for r in range(8) for c in range(8))
+        king_position = next(((row, col) for row in range(8) for col in range(8) if isinstance(self.board.board[row][col], King) and self.board.board[row][col].color == self.current_player), None)
+        if not king_position: return False
+        king_row, king_col = king_position
+        opponent_color = "black" if self.current_player == "white" else "white"
+        return any(isinstance(self.board.board[row][col], Piece) and self.board.board[row][col].color == opponent_color and (king_row, king_col) in self.board.board[row][col].possible_moves(self.board, row, col) for row in range(8) for col in range(8))
 
     def undo_last_move(self):
         """Отменяет последний ход."""
@@ -354,20 +448,20 @@ class Game:
             print("Ход отменен.")
         else: print("История ходов пуста.")
 
-    def undo_moves(self, num_moves):
+    def undo_moves(self, number_moves):
         """Отменяет несколько ходов."""
-        for _ in range(num_moves):
+        for _ in range(number_moves):
             if self.move_history: self.undo_last_move()
-            else: print("История ходов пуста."); break
+            else: print("История ходов пуста.")
 
 if __name__ == "__main__":
     while True:
-        gt = input("Выберите игру (chess или checkers): ").lower()
-        if gt in ["chess", "checkers"]: break
+        game_type = input("Выберите игру (chess или checkers): ").lower()
+        if game_type in ["chess", "checkers"]: break
         else: print("Неверный выбор.")
-    mod_chess = False
-    if gt == "chess":
+    modified_chess = False
+    if game_type == "chess":
         mod_str = input("Играть с новыми фигурами? (y/n): ").lower()
-        mod_chess = mod_str == "y"
-    game = Game(gt, mod_chess)
+        modified_chess = mod_str == "y"
+    game = Game(game_type, modified_chess)
     game.play()
