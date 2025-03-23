@@ -1,0 +1,373 @@
+import random
+
+class Move:
+    """Представляет ход в игре."""
+    def __init__(self, sr, sc, er, ec, p, cap, jr=None, jc=None):
+        """Инициализация хода."""
+        self.sr, self.sc, self.er, self.ec, self.p, self.cap, self.jr, self.jc = sr, sc, er, ec, p, cap, jr, jc
+
+class Piece:
+    """Базовый класс для фигур."""
+    def __init__(self, c, s):
+        """Инициализация фигуры."""
+        self.color, self.symbol = c, s
+    def __str__(self):
+        """Возвращает строковое представление фигуры."""
+        return self.symbol
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов (пустой по умолчанию)."""
+        return []
+    def is_valid_move(self, b, sr, sc, er, ec):
+        """Проверяет допустимость хода."""
+        return (er, ec) in self.possible_moves(b, sr, sc)
+
+class Pawn(Piece):
+    """Класс для пешки."""
+    def __init__(self, c): super().__init__(c, "P" if c == "white" else "p")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для пешки."""
+        m = []
+        d = -1 if self.color == "white" else 1
+        nr = sr + d
+        if 0 <= nr < 8 and not b.board[nr][sc]: m.append((nr, sc))
+        if (self.color == "white" and sr == 6) or (self.color == "black" and sr == 1):
+            nr = sr + 2 * d
+            if not b.board[nr][sc] and not b.board[sr + d][sc]: m.append((nr, sc))
+        for co in [-1, 1]:
+            nc = sc + co
+            if 0 <= nc < 8 and 0 <= (nr := sr + d) < 8 and b.board[nr][nc] and b.board[nr][nc].color != self.color: m.append((nr, nc))
+        return m
+
+class Rook(Piece):
+    """Класс для ладьи."""
+    def __init__(self, c): super().__init__(c, "R" if c == "white" else "r")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для ладьи."""
+        m = []
+        for dir in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            for i in range(1, 8):
+                nr, nc = sr + dir[0] * i, sc + dir[1] * i
+                if 0 <= nr < 8 and 0 <= nc < 8:
+                    if not b.board[nr][nc]: m.append((nr, nc))
+                    else:
+                        if b.board[nr][nc].color != self.color: m.append((nr, nc))
+                        break
+                else: break
+        return m
+
+class Knight(Piece):
+    """Класс для коня."""
+    def __init__(self, c): super().__init__(c, "N" if c == "white" else "n")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для коня."""
+        m = []
+        km = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for mv in km:
+            nr, nc = sr + mv[0], sc + mv[1]
+            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
+        return m
+
+class Bishop(Piece):
+    """Класс для слона."""
+    def __init__(self, c): super().__init__(c, "B" if c == "white" else "b")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для слона."""
+        m = []
+        for dir in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
+            for i in range(1, 8):
+                nr, nc = sr + dir[0] * i, sc + dir[1] * i
+                if 0 <= nr < 8 and 0 <= nc < 8:
+                    if not b.board[nr][nc]: m.append((nr, nc))
+                    else:
+                        if b.board[nr][nc].color != self.color: m.append((nr, nc))
+                        break
+                else: break
+        return m
+
+class Queen(Piece):
+    """Класс для ферзя."""
+    def __init__(self, c): super().__init__(c, "Q" if c == "white" else "q")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для ферзя."""
+        return Rook(self.color).possible_moves(b, sr, sc) + Bishop(self.color).possible_moves(b, sr, sc)
+
+class King(Piece):
+    """Класс для короля."""
+    def __init__(self, c): super().__init__(c, "K" if c == "white" else "k")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для короля."""
+        m = []
+        km = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        for mv in km:
+            nr, nc = sr + mv[0], sc + mv[1]
+            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
+        return m
+
+class Checker(Piece):
+    """Класс для шашки."""
+    def __init__(self, c):
+        """Инициализация шашки."""
+        super().__init__(c, "W" if c == "white" else "B")
+        self.direction = -1 if c == "white" else 1
+
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для шашки."""
+        m = []
+        for dir in [self.direction]:
+            for co in [-1, 1]:
+                nr, nc = sr + dir, sc + co
+                if 0 <= nc < 8 and 0 <= nr < 8 and not b.board[nr][nc]: m.append((nr, nc))
+        return m
+
+    def find_capture_moves(self, b, sr, sc):
+        """Находит все ходы взятия."""
+        cm = []
+        for dir in [-1, 1]:
+            for co in [-1, 1]:
+                nr, nc = sr + dir, sc + co
+                jr, jc = sr + 2 * dir, sc + 2 * co
+
+                if (0 <= nr < 8 and 0 <= nc < 8 and 0 <= jr < 8 and 0 <= jc < 8 and
+                    b.board[nr][nc] and b.board[nr][nc].color != self.color and not b.board[jr][jc]):
+                    cm.append((jr, jc))
+        return cm
+
+class Lancer(Piece):
+    """Класс для Копейщика."""
+    def __init__(self, c): super().__init__(c, "L" if c == "white" else "l")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для Копейщика."""
+        m = []
+        d = -1 if self.color == "white" else 1
+        for i in range(1, 8):
+            nr = sr + d * i
+            if 0 <= nr < 8:
+                if not b.board[nr][sc]: m.append((nr, sc))
+                else:
+                    if b.board[nr][sc].color != self.color: m.append((nr, sc))
+                    break
+            else: break
+        return m
+
+class Assassin(Piece):
+    """Класс для Ассасина."""
+    def __init__(self, c): super().__init__(c, "A" if c == "white" else "a")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для Ассасина."""
+        m = []
+        am = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for mv in am:
+            nr, nc = sr + mv[0], sc + mv[1]
+            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
+        return m
+
+class Fortress(Piece):
+    """Класс для Крепости."""
+    def __init__(self, c): super().__init__(c, "F" if c == "white" else "f")
+    def possible_moves(self, b, sr, sc):
+        """Возвращает список возможных ходов для Крепости."""
+        m = []
+        fm = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for mv in fm:
+            nr, nc = sr + mv[0], sc + mv[1]
+            if 0 <= nr < 8 and 0 <= nc < 8 and (not b.board[nr][nc] or b.board[nr][nc].color != self.color): m.append((nr, nc))
+        for r in range(8):
+            for c in range(8):
+                if not b.board[r][c]: m.append((r, c))
+        return m
+
+class Board:
+    """Представляет шахматную/шашечную доску."""
+    def __init__(self, gt="chess", mc=False):
+        """Инициализация доски."""
+        self.board = [[None for _ in range(8)] for _ in range(8)]
+        self.game_type, self.modified_chess = gt, mc
+        self.setup_board()
+
+    def setup_board(self):
+        """Расстановка фигур."""
+        if self.game_type == "chess":
+            piece_order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+            for i, p in enumerate(piece_order):
+                self.board[7][i] = p("white")
+                self.board[0][i] = p("black")
+
+            #Ставим пешки или новые фигуры на их место
+            if self.modified_chess:
+                pawn_replace = {1: Lancer, 4: Assassin, 6: Fortress}
+                for i in range(8):
+                    piece_type = pawn_replace.get(i, Pawn)
+                    self.board[6][i] = piece_type("white")
+                    self.board[1][i] = piece_type("black")
+            else: #Классические шахматы
+                for i in range(8):
+                    self.board[6][i] = Pawn("white")
+                    self.board[1][i] = Pawn("black")
+
+
+        elif self.game_type == "checkers":
+            for r in [0, 1, 2]:
+                for c in range(8):
+                    if (r + c) % 2 != 0: self.board[r][c] = Checker("black")
+            for r in [5, 6, 7]:
+                for c in range(8):
+                    if (r + c) % 2 != 0: self.board[r][c] = Checker("white")
+
+    def display(self, mc, pm=None, cm=None, tp=None, kic=False):
+        """Отображает доску в консоли."""
+        print(f"Текущий ход: {mc}")
+        print("  a b c d e f g h")
+        for r in range(8):
+            print(8 - r, end=" ")
+            for c in range(8):
+                p = self.board[r][c]
+                if kic and isinstance(p, King) and p.color == self.current_player: print("# ", end="")
+                elif tp and (r, c) in tp: print("? ", end="")
+                elif pm and (r, c) in pm: print("* ", end="")
+                elif cm and (r, c) in cm: print("! ", end="")
+                elif not p: print(". ", end="")
+                else: print(p, end=" ")
+            print(8 - r)
+        print("  a b c d e f g h")
+
+    def move_piece(self, sr, sc, er, ec, jr=None, jc=None):
+        """Перемещает фигуру."""
+        p = self.board[sr][sc]
+        cap = self.board[er][ec]
+        self.board[er][ec] = p
+        self.board[sr][sc] = None
+        if jr is not None and jc is not None: self.board[jr][jc] = None
+        return cap
+
+    def undo_move(self, move):
+        """Отменяет ход."""
+        self.board[move.sr][move.sc] = move.p
+        self.board[move.er][move.ec] = move.cap
+        if move.jr and move.jc and self.game_type == "checkers":
+            self.board[move.jr][move.jc] = Checker("black" if self.current_player == "white" else "white")
+
+class Game:
+    """Управляет игровым процессом."""
+    def __init__(self, gt="chess", mc=False):
+        """Инициализация игры."""
+        self.board = Board(gt, mc)
+        self.current_player, self.move_count, self.game_type, self.modified_chess, self.move_history = "white", 1, gt, mc, []
+
+    def get_coordinates(self, pos):
+        """Преобразует координаты."""
+        if len(pos) != 2 or not (0 <= (col := ord(pos[0]) - ord("a")) < 8 and 0 <= (row := 8 - int(pos[1])) < 8): return None
+        return row, col
+
+    def play(self):
+        """Запуск игры."""
+        while True:
+            tp = self.find_threatened_pieces()
+            kic = self.is_king_in_check()
+            self.board.display(self.move_count, tp=tp, kic=kic)
+            print(f"Ход {self.move_count}. Ход {self.current_player}.")
+            print("Введите 'отмена' для отмены хода или 'отмена N' для отмены N ходов.  Введите координаты фигуры (например, a2).")
+
+            # 1. Выбор фигуры
+            while True:
+                sp = input("Выберите фигуру для хода: ")
+                if sp == "отмена": self.undo_last_move(); break
+                elif sp.startswith("отмена "):
+                    try: self.undo_moves(int(sp[7:])); break
+                    except ValueError: print("Неверный формат команды 'отмена'. Используйте 'отмена N', где N - целое число."); continue
+
+                sc = self.get_coordinates(sp)
+                if not sc: print("Неверный формат позиции.  Пример: a2"); continue
+
+                sr, sc = sc
+                p = self.board.board[sr][sc]
+                if not p: print("На этой позиции нет фигуры."); continue
+                if p.color != self.current_player: print("Это не ваша фигура."); continue
+
+                # 2. Подсказка и отображение
+                pm = p.possible_moves(self.board, sr, sc)
+                cm = p.find_capture_moves(self.board, sr, sc) if self.game_type == "checkers" and isinstance(p, Checker) else []
+                if not pm and not cm and self.game_type == "chess": print("У этой фигуры нет доступных ходов. Выберите другую фигуру."); continue
+
+                self.board.display(self.move_count, pm, cm, tp, kic)
+                break
+
+            if sp.startswith("отмена") or sp == "отмена": continue
+
+            # 3. Ввод целевой позиции
+            while True:
+                ep = input("Введите целевую позицию: ")
+                ec = self.get_coordinates(ep)
+                if not ec: print("Неверный формат позиции.  Пример: a2"); continue
+
+                er, ec = ec
+                jr, jc = None, None
+                if self.game_type == "checkers" and isinstance(p, Checker) and (er,ec) in cm:
+                    jr, jc = (sr + er) // 2, (sc + ec) // 2
+                    cap = self.board.board[jr][jc]
+                elif self.board.board[er][ec] and self.board.board[er][ec].color != p.color: cap = self.board.board[er][ec]
+                else: cap = None
+
+                is_valid_move = (self.game_type == "checkers" and isinstance(p, Checker) and (er, ec) in cm) or ((er, ec) in pm or (er, ec) in cm)
+
+                if is_valid_move:
+                    captured_piece = self.board.move_piece(sr, sc, er, ec, jr, jc)
+                    move = Move(sr, sc, er, ec, p, captured_piece, jr, jc)
+                    self.move_history.append(move)
+                    self.current_player = "black" if self.current_player == "white" else "white"
+                    self.move_count += 1
+                    break
+                else:
+                    print("Недопустимый ход.")
+                    self.board.display(self.move_count, pm, cm, tp, kic)
+
+    def find_threatened_pieces(self):
+        """Находит все фигуры, находящиеся под ударом."""
+        tp = []
+        oc = "black" if self.current_player == "white" else "white"
+        for orow in range(8):
+            for ocol in range(8):
+                op = self.board.board[orow][ocol]
+                if op and op.color == oc:
+                    pom = op.possible_moves(self.board, orow, ocol)
+                    for row in range(8):
+                        for col in range(8):
+                            p = self.board.board[row][col]
+                            if p and p.color == self.current_player and not isinstance(p, King) and (row, col) in pom:
+                                tp.append((row, col))
+        return tp
+
+    def is_king_in_check(self):
+        """Проверяет, находится ли король под шахом."""
+        kp = next(((r, c) for r in range(8) for c in range(8) if isinstance(self.board.board[r][c], King) and self.board.board[r][c].color == self.current_player), None)
+        if not kp: return False
+        kr, kc = kp
+        oc = "black" if self.current_player == "white" else "white"
+        return any(isinstance(self.board.board[r][c], Piece) and self.board.board[r][c].color == oc and (kr, kc) in self.board.board[r][c].possible_moves(self.board, r, c) for r in range(8) for c in range(8))
+
+    def undo_last_move(self):
+        """Отменяет последний ход."""
+        if self.move_history:
+            move = self.move_history.pop()
+            self.board.undo_move(move)
+            self.current_player = "black" if self.current_player == "white" else "white"
+            self.move_count -= 1
+            print("Ход отменен.")
+        else: print("История ходов пуста.")
+
+    def undo_moves(self, num_moves):
+        """Отменяет несколько ходов."""
+        for _ in range(num_moves):
+            if self.move_history: self.undo_last_move()
+            else: print("История ходов пуста."); break
+
+if __name__ == "__main__":
+    while True:
+        gt = input("Выберите игру (chess или checkers): ").lower()
+        if gt in ["chess", "checkers"]: break
+        else: print("Неверный выбор.")
+    mod_chess = False
+    if gt == "chess":
+        mod_str = input("Играть с новыми фигурами? (y/n): ").lower()
+        mod_chess = mod_str == "y"
+    game = Game(gt, mod_chess)
+    game.play()
